@@ -1,0 +1,1424 @@
+---
+title: "HPU data exploration"
+author: "Emma Kaz Frick"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    highlight: tango
+    number_sections: false
+    code_folding: hide
+    df_print: paged
+  word_document:
+    toc: true
+---
+
+# Set up and data import
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r version-and-current-date}
+R.version.string
+Sys.Date()
+library(tidyverse)
+library(broom)
+library(glue)
+library(knitr)
+library(mosaic)
+```
+
+## Read in and print columns
+
+### Raw survey response data, n=160
+
+160 observations read in. 9 non-consenting respondents were removed by
+hand in the source file prior to upload.
+
+```{r}
+perceptions <- read_csv("../data/perceptions_cleaned.csv",
+                        col_names=TRUE) 
+head(perceptions,10)
+```
+
+### completed survey response data, n=67
+
+```{r}
+#removed any less than 100% complete
+# after 100%, next listed completion level was 67% complete 
+# non-consenting records were also removed by hand
+percep_data <- read_csv("../data/perceptions_cleaned_incompletesremoved.csv",
+                        col_names=TRUE) 
+head(percep_data)
+```
+
+# Remove -99, replace with NA
+
+```{r}
+percep_data [percep_data == -99] <- NA
+```
+
+## New vectors
+
+```{r}
+percep_data |>
+  mutate(
+    high_confidence=
+        case_when(
+          sbs_confidence == 1 ~ 1,
+          .default = 0)  
+      ) -> percep_data_f
+tail(percep_data_f,9)
+```
+
+```{r}
+percep_data_f |>
+  mutate(
+    high_willingness=
+        case_when(
+          sbs_willingness == 1 ~ 1,
+          .default = 0)  
+      ) -> percep_data_f
+tail(percep_data_f,9)
+```
+
+```{r}
+percep_data_f |>
+  mutate(
+    age_binary=
+        case_when(
+          age == 6 ~ 1,
+          .default = 0)  
+      ) -> percep_data_f
+tail(percep_data_f,9)
+```
+
+## Adding labels to ordinal & categorical values
+
+```{r}
+percep_data_f |>
+  mutate(
+    high_confidence_f=factor(
+      high_confidence,
+      levels=0:1,
+      labels=c("No", "Yes")
+    )
+  ) |>
+  mutate(
+    high_willingness_f=factor(
+      high_willingness,
+      levels=0:1,
+      labels=c("No", "Yes")
+    )
+  ) |>
+  mutate(
+    age_binary_f=factor(
+      age_binary,
+      levels=0:1,
+      labels=c("20-59 yrs", "60+ years")
+    )
+  ) |>
+  mutate(
+    administrator_f=factor(
+      professional_roles_admin,
+      levels=0:1,
+      labels=c("No", "Yes")
+    )
+  ) |>
+  mutate(
+    curriculum_dev_f=factor(
+      professional_roles_curriculum,
+     levels=0:1,
+      labels=c("No", "Yes")
+    )
+  ) |>
+  mutate(
+    age_f=factor(
+      age, 
+      levels=2:6,
+      labels=c("29 yrs or younger", "30-39 yrs", "40-49 yrs", "50-59 yrs", "60 yrs or older")
+    )
+  ) |>
+  mutate(
+    age_29drop=factor(
+      age,
+      levels=3:6,
+      labels=c("30-39 yrs", "40-49 yrs", "50-59 yrs", "60 yrs or older")
+    )
+  ) |>
+  mutate(
+      yrs_practice_f=factor(
+        yrs_practice, 
+        levels=1:5,
+        labels=c("less than 5 yrs", "5-10 yrs", "11-15 yrs", "16-20 yrs", "20+ yrs")
+      )
+  ) |>
+  mutate(
+      sbs_importance_f=factor(
+        sbs_importance, 
+        levels=1:4,
+        labels=c("Critical", "Very Important", "Somewhat Important", "Not At All Important")
+      )
+  ) |>
+  mutate(
+      sbs_willingness_f=factor(
+        sbs_willingness, 
+        levels=1:4,
+        labels=c("Very Willing", "Somewhat Willing", "Somewhat Unwilling", "Very Unwilling")
+      )
+  ) |>  
+  mutate(
+      sbs_confidence_f=factor(
+        sbs_confidence, 
+        levels=1:4,
+        labels=c("Highly Confident", "Somewhat Confident", "Somewhat Unconfident", "Not At All Confident")
+      )
+  ) |>
+  mutate(
+    icf_f=factor(
+      icf,
+      levels=1:2,
+      labels=c("Continue", "Exit Survey")
+    )
+  ) -> percep_data_f
+tail(percep_data_f,10)
+```
+
+# Missingness and completion information
+
+## Total Missing count on raw data, n=160
+
+In the raw data there are 17,535 blank values (not including -99 values--indicating questions seen and not answered), n=160.
+
+```{r}
+    sum(is.na(perceptions))
+```
+
+## Total Missing count on cleaned data with only completed responses, n=67
+
+There are only two missing/blank values in the cleaned data of completed responses, n=67. 
+This does not include those values were a response was seen but left blank, where Qualtrics reports a -99 code.
+
+```{r}
+    sum(is.na(percep_data))
+    sum(is.na(percep_data_f)) #-99 removed earlier, replaced with NA
+```
+ 
+## Number of missing values for age in raw data, n=160
+
+```{r}
+perceptions$age[perceptions$age == -99]
+# dont run this: which(perceptions == -99)
+```
+
+## Total response counts
+
+### Number of records selecting non-consent button to exit out of survey at start
+
+Nine respondents out of 169 total chose to exit the survey at the informed script page.
+
+```{r}
+# code note: uses dplyr lib
+# Counts occurrences of each value in the 'icf' column
+icf_counts_accept <- percep_data_f %>%
+  count(icf_f)
+icf_counts_accept
+```
+
+### Counts for all responses (complete & inclomplete, but excluding non-consent)
+
+There were a total of 160 respondents that consented to the survey.
+
+```{r}
+count(perceptions)
+```
+
+### Counts for complete responses (excluding inclomplete and non-consent)
+
+There were 67 respondents that consented and completed the survey.
+
+There were 93 respondents who did not complete the survey. 
+
+```{r}
+count(percep_data_f)
+```
+
+### Completion rate and duration on raw data file, n=160
+
+Mean completion percentage was an average of 66% complete for all responses (+/- SD of 30%), n=160. 
+
+Note: Non-consent were removed (n=9).
+
+Mean duration of having the survey open was 2,527 seconds (or 42 minutes), SD +/- 15,136 seconds (252 minutes, or 4.2 hours), n=160. 
+
+Median duration of having the survey open (reported so as to account for extreme outliers) was 549 seconds or 9 mins, n=160.
+
+```{r}
+perceptions |>
+    summarize(
+      n160_duration_minutes_mean=round(mean(duration/60, na.rm=TRUE),0),
+      n160_duration_minutes_SD=round(sd(duration/60, na.rm=TRUE),0),
+      n160_duration_minutes_median=round(median(duration/60,na.rm=TRUE),0),
+      n160_completion_prog_percent_mean=round(mean(progress, na.rm=TRUE),0),
+      n160_completion_prog_percent_SD=round(sd(progress,na.rm = TRUE),0)
+    ) -> tbl_n160_completion
+tbl_n160_completion
+```
+
+### Completion duration on 'completed records' data file, n=67
+
+The following report is limited to those records that completed the survey (100% complete in completion progress variable), n=67.
+
+The mean duration of having the survey window open was 5,369 seconds (or 90 minutes) (SD 6.4 hours), n=67.
+The median duration of having the survey window open was 1,211 seconds (or 20.2 minutes) open.
+
+```{r}
+percep_data_f |>
+    summarize(
+      n67_duration_minutes_mean=round(mean(duration/60, na.rm=TRUE),0),
+      n67_duration_minutes_SD=round(sd(duration/60, na.rm=TRUE),0),
+      n67_duration_minutes_median=round(median(duration/60,na.rm=TRUE),0),
+      n67_completion_prog_percent_mean=round(mean(progress, na.rm=TRUE),0),
+      n67_completion_prog_percent_SD=round(sd(progress,na.rm = TRUE),0)
+    ) -> tbl_n67_completion
+tbl_n67_completion
+```
+
+# Demograpics
+
+## Age distribution
+
+### Age distribution on raw data
+
+For the raw data, the median age group was "50-59 years". The bar chart below shows the distribution of age groups in the raw sample.
+
+```{r}
+perceptions |>
+    summarize(
+      raw_age_groups_median=round(median(age, na.rm=TRUE),0)
+      )
+```
+
+```{r}
+perceptions |>
+  ggplot()+
+    aes(x=age) +
+    xlim(1,7) +
+    geom_bar() +
+    xlab("Age Group") +
+    ylab("Count") +
+    ggtitle("Age Distribution, Raw data") -> plot_age_raw
+plot_age_raw
+```
+
+### Age distribution on cleaned data
+
+```{r}
+counts(percep_data_f$age_f)
+```
+
+```{r}
+# '~ x1 + x2' for regular contingency table, 'margins=TRUE' for totals
+tally(~age_f + administrator_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+# 'x1 | x2' for col percents
+tally(~age_f | administrator_f, format="percent", data=percep_data_f)
+```
+
+```{r}
+# '~ x1 + x2' for regular contingency table, 'margins=TRUE' for totals
+tally(~age_f + curriculum_dev_f, margins=TRUE,data=percep_data_f)
+```
+
+
+```{r}
+tally(~age_f | curriculum_dev_f, format="percent",data=percep_data_f)
+```
+
+```{r}
+# '~ x1 + x2' for regular contingency table, 'margins=TRUE' for totals
+tally(~age_f + high_confidence_f, margins=TRUE,data=percep_data_f)
+```
+
+
+```{r}
+# 'x1 | x2' for col percents
+tally(~age_f | high_confidence_f, format="percent",data=percep_data_f)
+```
+
+```{r}
+# '~ x1 + x2' for regular contingency table, 'margins=TRUE' for totals
+tally(~age_f + high_willingness_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+# 'x1 | x2' for col percents
+tally(~age_f | high_willingness_f, format="percent",data=percep_data_f)
+```
+
+Among completed responses, the median age group was "60 years and older". 
+
+Values were: 2 = <=29, 3 = 30-39, 4 = 40-49, 5 = 50-59, 6 = >=60
+
+```{r}
+percep_data_f |>
+    summarize(
+      complete_age_groups_median=round(median(age, na.rm=TRUE),0)
+      )
+```
+
+The bar chart below visualizes the distribution of age groups among complete responses. 
+
+```{r}
+percep_data_f |>
+  ggplot()+
+    aes(x=age_f) +
+    geom_bar() + 
+    xlab("Age Group") +
+    ylab("Count") +
+    ggtitle("Age Distribution, Among complete responses (n=67)") -> plot_n160_age
+plot_n160_age
+```
+
+
+## Years in practice group distribution on 'completed records' data
+
+```{r}
+counts(percep_data_f$yrs_practice_f)
+```
+
+Among completed responses, the median years in practice group was "20+ years in practice". 
+
+Values were: 1 = <5, 2 = 5-10, 3 = 11-15, 4 = 16-20, 5 = >=20
+
+```{r}
+percep_data_f |>
+    summarize(
+      complete_yrsprac_groups_median=round(median(yrs_practice, na.rm=TRUE),0)
+      )
+```
+
+```{r}
+percep_data_f |>
+  ggplot()+
+    aes(x=yrs_practice_f) +
+    geom_bar() +
+    xlab("Years in Practice Group") +
+    ylab("Count") +
+    ggtitle("Distribution of Years in Practice, Among complete responses (n=67)") -> plot_n67_yrs_practice
+plot_n67_yrs_practice
+```
+
+## Summary of professional roles among completed responses
+
+### Curric & admin overlap 
+
+```{r}
+counts(percep_data_f$curriculum_dev_f)
+```
+
+```{r}
+counts(percep_data_f$administrator_f)
+```
+
+```{r}
+counts(percep_data_f$professional_roles_didactic)
+```
+
+```{r}
+counts(percep_data_f$professional_roles_clinic)
+```
+
+```{r}
+counts(percep_data_f$professional_roles_preclinic)
+```
+
+```{r}
+counts(percep_data_f$professional_roles_accreditation)
+```
+
+
+
+36% of sample were curric dev, 45% were administrators
+If you are in curric dev you are more likely to be an admin. 18/67 were both admin and curric devs.
+If you were not an admin, you probably werent a curric dev (6/67 were curric dev but NOT admin).  
+
+```{r}
+tally(~curriculum_dev_f + administrator_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~curriculum_dev_f + administrator_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+
+Response counts for professional roles (multiple check box), n=67: 
+
+\ 50 didactic 
+
+\ 65 clinical 
+
+\ 33 preclinical 
+
+\ 30 administrative 
+
+\ 24 curriculum development 
+
+\ 25 research 
+
+\ 6 other (free text prompt)
+
+\ Values were -99 = seen and not answered; 0 = not checked, 1 = checked.
+
+
+```{r}
+percep_data_f |>
+count(professional_roles_didactic) -> tbl_dida
+print(tbl_dida)
+```
+
+```{r}
+percep_data_f |>
+count(professional_roles_clinic) -> tbl_clin
+print(tbl_clin)
+```
+
+```{r}
+percep_data_f |>
+count(`professional_roles_preclinic`) -> tbl_pre
+print(tbl_pre)
+```
+
+```{r}
+percep_data_f |>
+count(professional_roles_admin) -> tbl_admin
+print(tbl_admin)
+```
+
+```{r}
+percep_data_f |>
+count(professional_roles_curriculum) -> tbl_curr
+print(tbl_curr)
+```
+
+```{r}
+percep_data_f |>
+count(professional_roles_research) -> tbl_res
+print(tbl_res)
+```
+
+```{r}
+percep_data_f |>
+count(professional_roles_other) -> tbl_other
+print(tbl_other)
+```
+
+```{r}
+bind_cols(tbl_dida, tbl_clin, tbl_pre, tbl_admin, tbl_curr, tbl_res, tbl_other) -> tbl_prof_roles
+glimpse(tbl_prof_roles)
+```
+
+# Summary Questions on SBS Importance, Willingness, and Confidence
+
+## Rating Social and behavioral science Importance
+
+```{r}
+counts(percep_data_f$sbs_importance_f)
+```
+
+Median response on importance of SBS was a score of 1 = "critical importance".
+
+```{r}
+percep_data_f |>
+summarize(median(sbs_importance,na.rm = TRUE))
+```
+
+```{r}
+percep_data_f |>
+  ggplot()+
+    aes(x=sbs_importance_f) +
+    geom_bar() +
+    xlab("Rating the Importance of SBS") +
+    ylab("Count") +
+    ggtitle("'Importance of SBS' Distribution, Among Complete responses (n=67)") -> plot_n67_sbs_importance
+plot_n67_sbs_importance
+```
+
+## Rating Social and behavioral science Willingness
+
+```{r}
+counts(percep_data_f$sbs_willingness_f)
+```
+
+Median response on willingness to implement SBS into practice was a score of 1 = "very willing".
+
+```{r}
+percep_data_f |>
+summarize(median(sbs_willingness,na.rm = TRUE))
+```
+
+```{r}
+percep_data_f |>
+  ggplot()+
+    aes(x=sbs_willingness_f) +
+    geom_bar() +
+    xlab("Rating Willingness to integrate SBS") +
+    ylab("Count") +
+    ggtitle("'Willingness to integrate SBS' Distribution, Among Complete responses (n=67)") -> plot_n67_sbs_willingness
+plot_n67_sbs_willingness
+```
+
+## Rating Social and behavioral science Confidence
+
+```{r}
+counts(percep_data_f$sbs_confidence_f)
+```
+
+Median response on their confidence in integrating SBS was a score of 2 = "Somewhat confident".
+
+```{r}
+percep_data_f |>
+summarize(median(sbs_confidence,na.rm = TRUE))
+```
+
+```{r}
+percep_data_f |>
+  ggplot()+
+    aes(x=sbs_confidence_f) +
+    geom_bar() +
+    xlab("Rating Confidence in Integrating SBS") +
+    ylab("Count") +
+    ggtitle("'Confidence in integrating SBS' Distribution, Among Complete responses (n=67)") -> plot_n67_sbs_confidence
+plot_n67_sbs_confidence
+```
+
+# Summary of CE sources
+
+Response count for SBS CE type (multiple check boxes), n=67:
+
+\ 43 Attending workshops or conferences 
+
+\ 38 Participating in online courses or webinars
+
+\ 32 Reading academic journals or publications 
+
+\ 46 Engaging in discussions with colleagues or peers 
+
+\ 23 Seeking mentorship or guidance from experts
+
+\ 4 other (free text prompt) 
+
+\ 5 none - do not engage with SBS CE
+
+\ 1 viewed but did not complete this question (-99 value)
+
+\ Values were -99 = seen and not answered; 0 = not checked, 1 = checked.
+
+```{r}
+percep_data_f |>
+count(`ce_Attending workshops or conferences`) -> tbl_ce_wksp
+print(tbl_ce_wksp)
+```
+
+```{r}
+percep_data_f |>
+count(`ce_Participating in online courses or webinars`) -> tbl_ce_web
+print(tbl_ce_web)
+```
+
+```{r}
+percep_data_f |>
+count(`ce_Reading academic journals or publications`) -> tbl_ce_pub
+print(tbl_ce_pub)
+```
+
+```{r}
+percep_data |>
+count(`ce_Engaging in discussions with colleagues or peers`) -> tbl_ce_peer
+print(tbl_ce_peer)
+```
+
+```{r}
+percep_data_f |>
+count(`ce_Seeking mentorship or guidance from experts`) -> tbl_ce_exp
+print(tbl_ce_exp)
+```
+
+```{r}
+percep_data_f |>
+count(ce_other) -> tbl_ce_other
+print(tbl_ce_other)
+```
+
+```{r}
+percep_data_f |>
+count(ce_none) -> tbl_ce_none
+print(tbl_ce_none)
+```
+
+```{r}
+bind_cols(tbl_ce_wksp,tbl_ce_web,tbl_ce_pub,tbl_ce_peer,tbl_ce_exp,tbl_ce_other,tbl_ce_none) -> tbl_ce_types
+print(tbl_ce_types)
+```
+
+## Table of CE Types (Counts)
+
+```{r}
+df_ce_counts <- data.frame(
+  Category=c("Conference", "Webinar", "Journal", "Peers", "Experts", "Other","None"),
+  count=c(43,38,32,46,23,4,1))
+print(df_ce_counts)
+```
+
+```{r}
+#pivot table for CE vars
+percep_data_f |>
+  select(`ce_Attending workshops or conferences`,
+         `ce_Participating in online courses or webinars`,
+         `ce_Reading academic journals or publications`,
+         `ce_Engaging in discussions with colleagues or peers`,
+         `ce_Seeking mentorship or guidance from experts`,
+         ce_other,
+         ce_none) -> df_ce
+head(df_ce,10)
+```
+
+## Pie Chart of CE Types (Counts)
+
+```{r}
+t(df_ce_counts) -> ce_counts_transpose
+ce_counts_transpose
+```
+
+```{r}
+df_pie_ce <- data.frame(
+  Category=c("Conference", "Webinar", "Journal", "Peers", "Experts", "Other", "None"),
+  count=c(43,38,32,46,23,4,1)
+)
+ggplot(df_pie_ce,
+       aes(x="",
+         y=count,
+         fill=Category)) +
+  geom_bar(stat="identity",
+           width=1) +
+  scale_fill_brewer(palette="Set2") +
+  coord_polar(theta="y") +
+  theme_void() +
+  labs(title="Sources of Continuing Education for SBS Topics") -> plot_n67_pie_ce
+plot_n67_pie_ce
+```
+
+
+## Table of Role Types (counts)
+
+```{r}
+df_role_counts <- data.frame(
+  Category=c("Didactic", "Clinic", "Preclinic", "Administrative", "Curriculum Development", "Research","Other"),
+  count=c(50,65,33,30,24,25,6))
+print(df_role_counts)
+```
+
+
+## Pie Chart of Role Types (Counts)
+
+```{r}
+t(df_role_counts) -> df_role_counts_transpose
+df_role_counts_transpose
+```
+
+```{r}
+df_pie_role <- data.frame(
+  Category=c("Didactic", "Clinic", "Preclinic", "Administrative", "Curriculum Development", "Research", "Other"),
+  count=c(50,65,33,30,24,25,6))
+ggplot(df_pie_role,
+       aes(x="",
+         y=count,
+         fill=Category)) +
+  geom_bar(stat="identity",
+           width=1) +
+  scale_fill_brewer(palette="Set2") +
+  coord_polar(theta="y") +
+  theme_void() +
+  labs(title="Professional Roles Held") -> plot_n67_pie_role
+plot_n67_pie_role
+```
+
+# 2x2 Tables
+
+## Confidence X Willingness
+
+```{r}
+tally(~high_confidence_f + high_willingness_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~high_confidence_f + high_willingness_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+### Admin X Willingness
+
+```{r}
+tally(~administrator_f + high_willingness_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~administrator_f + high_willingness_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+### Curriculum X Willingness
+
+```{r}
+tally(~curriculum_dev_f + high_willingness_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~curriculum_dev_f + high_willingness_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+### Age X Willingness
+
+```{r}
+tally(~age_binary_f + high_willingness_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+tally(~age_f + high_willingness_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~age_29drop + high_willingness_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+```{r}
+xchisq.test(~age_binary_f + high_willingness_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+### Admin X Confidence
+
+```{r}
+tally(~administrator_f + high_confidence_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~administrator_f + high_confidence_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+### Curriculum X Confidence
+
+```{r}
+tally(~curriculum_dev_f + high_confidence_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~curriculum_dev_f + high_confidence_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+### Age X Confidence
+
+```{r}
+tally(~age_binary_f + high_confidence_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+tally(~age_f + high_confidence_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~age_binary_f + high_confidence_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+
+```{r}
+xchisq.test(~age_29drop + high_confidence_f,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+## CE Counts filtered by Willingness
+
+```{r}
+percep_data_f |>
+  select(high_willingness_f, `ce_Attending workshops or conferences`,`ce_Participating in online courses or webinars`,`ce_Reading academic journals or publications`,`ce_Engaging in discussions with colleagues or peers`,`ce_Seeking mentorship or guidance from experts`,ce_other, ce_none) -> df_ce_groupby_willingness
+df_ce_groupby_willingness
+```
+
+
+# Grouping by Confidence Level
+
+```{r}
+# '~ x1 + x2' for regular contingency table, 'margins=TRUE' for totals
+tally(~high_willingness_f + high_confidence_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+# '~ x1 + x2' for regular contingency table, 'margins=TRUE' for totals
+tally(~administrator_f + high_confidence_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+# '~ x1 + x2' for regular contingency table, 'margins=TRUE' for totals
+tally(~curriculum_dev_f + high_confidence_f, margins=TRUE,data=percep_data_f)
+```
+
+```{r}
+percep_data_f |>
+	count(high_confidence_f) |>
+  	mutate(total=sum(n)) |>
+  	mutate(pct=round(100*n/total)) |>
+	  mutate(pct=glue("{pct}% ({n}/{total})")) |>
+	  select(-n, -total) -> tbl_count_conf
+tbl_count_conf
+```
+
+## Confidence and CE
+CE categories:
+\ - ce_Attending workshops or conferences	
+\ - ce_Participating in online courses or webinars	
+\ - ce_Reading academic journals or publications	
+\ - ce_Engaging in discussions with colleagues or peers	
+\ - ce_Seeking mentorship or guidance from experts	
+\ - ce_other	
+\ - ce_none
+
+### CE Counts filtered by Confidence
+
+```{r}
+percep_data_f |>
+  select(high_confidence_f, `ce_Attending workshops or conferences`,`ce_Participating in online courses or webinars`,`ce_Reading academic journals or publications`,`ce_Engaging in discussions with colleagues or peers`,`ce_Seeking mentorship or guidance from experts`,ce_other, ce_none) -> df_ce_groupby_confidence
+df_ce_groupby_confidence
+```
+
+### Attending workshops or conferences
+
+```{r}
+plot_bar_ce_con <- select(
+    percep_data_f,`ce_Attending workshops or conferences`, high_confidence_f) |>
+  filter(`ce_Attending workshops or conferences`!= -99) |>
+  ggplot() +
+    aes(`ce_Attending workshops or conferences`, 
+        fill=high_confidence_f) +
+    geom_bar()
+plot_bar_ce_con
+```
+
+```{r}
+tally(~ `ce_Attending workshops or conferences` + 
+        high_confidence, 
+      margins=TRUE, 
+      data=percep_data_f)
+```
+
+```{r}
+tally(~`ce_Attending workshops or conferences` +
+        high_confidence,
+      format="percent",
+      data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~`ce_Attending workshops or conferences` +
+        high_confidence,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+```{r}
+mosaicplot(~`ce_Attending workshops or conferences` +
+             high_confidence_f,
+           color=TRUE,
+           data=percep_data_f)
+```
+
+### Participating in online courses or webinars
+
+```{r}
+plot_bar_ce_web <- select(
+    percep_data_f,`ce_Participating in online courses or webinars`, high_confidence_f) |>
+  filter(`ce_Participating in online courses or webinars`!= -99) |>
+  ggplot() +
+    aes(`ce_Participating in online courses or webinars`, 
+        fill=high_confidence_f) +
+    geom_bar()
+plot_bar_ce_web
+```
+
+```{r}
+tally(~ `ce_Participating in online courses or webinars` + 
+        high_confidence, 
+      margins=TRUE, 
+      data=percep_data_f)
+```
+
+```{r}
+tally(~`ce_Participating in online courses or webinars` +
+        high_confidence,
+      format="percent",
+      data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~`ce_Participating in online courses or webinars` +
+        high_confidence,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+```{r}
+mosaicplot(~`ce_Participating in online courses or webinars` +
+             high_confidence_f,
+           color=TRUE,
+           data=percep_data_f)
+```
+
+### Reading academic journals or publications
+
+```{r}
+plot_bar_ce_pub <- select(
+    percep_data_f,`ce_Reading academic journals or publications`, high_confidence_f) |>
+  filter(`ce_Reading academic journals or publications`!= -99) |>
+  ggplot() +
+    aes(`ce_Reading academic journals or publications`, 
+        fill=high_confidence_f) +
+    geom_bar()
+plot_bar_ce_pub
+```
+
+```{r}
+tally(~ `ce_Reading academic journals or publications` + 
+        high_confidence, 
+      margins=TRUE, 
+      data=percep_data_f)
+```
+
+```{r}
+tally(~`ce_Reading academic journals or publications` +
+        high_confidence,
+      format="percent",
+      data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~`ce_Reading academic journals or publications` +
+        high_confidence,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+```{r}
+mosaicplot(~`ce_Reading academic journals or publications` +
+             high_confidence_f,
+           color=TRUE,
+           data=percep_data_f)
+```
+
+## Confidence and Role
+
+### Admin confidence
+
+```{r}
+plot_bar_admin <- ggplot(
+  percep_data_f,
+  aes(
+    administrator_f, fill=high_confidence_f)) +
+  geom_bar()
+plot_bar_admin
+```
+
+```{r}
+tally(~administrator_f + 
+        high_confidence, 
+      margins=TRUE, 
+      data=percep_data_f)
+```
+
+```{r}
+tally(~administrator_f +
+        high_confidence,
+      format="percent",
+      data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~administrator_f +
+        high_confidence,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+```{r}
+mosaicplot(~administrator_f +
+             high_confidence_f,
+           color=TRUE,
+           data=percep_data_f)
+```
+
+### Curriculum Developer Confidence
+
+```{r}
+plot_bar_curr <- ggplot(
+  percep_data_f,
+  aes(
+    curriculum_dev_f, fill=high_confidence_f)) +
+  geom_bar()
+plot_bar_curr
+```
+
+```{r}
+tally(~curriculum_dev_f + 
+        high_confidence, 
+      margins=TRUE, 
+      data=percep_data_f)
+```
+
+```{r}
+tally(~curriculum_dev_f +
+        high_confidence,
+      format="percent",
+      data=percep_data_f)
+```
+
+```{r}
+xchisq.test(~curriculum_dev_f +
+        high_confidence,
+      data=percep_data_f,
+      correct=FALSE,
+      simulate.p.value = TRUE)
+```
+
+```{r}
+mosaicplot(~curriculum_dev_f +
+             high_confidence_f,
+           color=TRUE,
+           data=percep_data_f)
+```
+
+# Grouping by Curriculum Developer Role
+
+```{r}
+percep_data_f |>
+	count(curriculum_dev_f) |>
+  	mutate(total=sum(n)) |>
+  	mutate(pct=round(100*n/total)) |>
+	  mutate(pct=glue("{pct}% ({n}/{total})")) |>
+	  select(-n, -total) -> tbl_count_curric
+tbl_count_curric
+```
+
+# Grouping by Admin Role
+
+```{r}
+percep_data_f |>
+	count(administrator_f) |>
+  	mutate(total=sum(n)) |>
+  	mutate(pct=round(100*n/total)) |>
+	  mutate(pct=glue("{pct}% ({n}/{total})")) |>
+	  select(-n, -total) -> tbl_count_admin
+tbl_count_admin
+```
+
+# SBS Special Population Questions 
+
+## Frequency Section
+
+Q8 Frequency: An estimate of how often you encounter the topic in patient care Please rate the frequency of providing care for patients with the following social or behavioral health factors:
+
+Less than annually (1)
+Annually (2)
+Quarterly (3)
+Monthly (4)
+Weekly (5)
+Daily (6)
+
+### Freq: Low Health Literacy (LHL) Population
+
+```{r}
+percep_data_f |>
+    summarize(
+      all_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Freq: LHL by Confidence
+
+Only by high confidence: 
+
+```{r}
+percep_data_f |>
+  filter(high_confidence_f!="No") |>
+    summarize(
+      highconf_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by less than high confidence:  
+
+```{r}
+percep_data_f |>
+  filter(high_confidence_f!="Yes") |>
+    summarize(
+      lowconf_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Freq: LHL by Willingness
+
+Only by high Willingness: 
+
+```{r}
+percep_data_f |>
+  filter(high_willingness_f !="No") |>
+    summarize(
+      highwill_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by less than high Willingness: 
+
+```{r}
+percep_data_f |>
+  filter(high_willingness_f !="Yes") |>
+    summarize(
+      lowwill_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Freq: LHL by Age
+
+Only by Older respondents (60+): 
+
+```{r}
+percep_data_f |>
+  filter(age_binary_f !="20-59 yrs") |>
+    summarize(
+      older_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by Younger respondents (20-59): 
+
+```{r}
+percep_data_f |>
+  filter(age_binary_f !="60+ years") |>
+    summarize(
+      younger_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Freq: LHL by Adminitrator Role
+
+Only by Administrators: 
+
+```{r}
+percep_data_f |>
+  filter(administrator_f !="No") |>
+    summarize(
+      yesadmin_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by non-Administrators: 
+
+```{r}
+percep_data_f |>
+  filter(administrator_f !="Yes") |>
+    summarize(
+      notadmin_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Freq: LHL by Curriculum Role
+
+Only by Curriculum Developers: 
+
+```{r}
+percep_data_f |>
+  filter(curriculum_dev_f !="No") |>
+    summarize(
+      yescurric_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by non-Curriculum Developers: 
+
+```{r}
+percep_data_f |>
+  filter(curriculum_dev_f !="Yes") |>
+    summarize(
+      notcurric_median_freq_lowhealthlit=round(median(freq_lowhealthlit,na.rm=TRUE),0))
+```
+
+
+## Difficulty Section
+
+Q18 Difficulty: Your perceived difficulty of asking, evaluating, and integrating the topic into patient care Please rate the difficulty of providing care for patients with the following social or behavioral health factors:
+
+Not at all (1)
+Low (2)
+Moderate (3)
+High (4)
+
+### Diff: Low Health Literacy (LHL) Population
+
+```{r}
+percep_data_f |>
+    summarize(
+      all_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Diff: LHL by Confidence
+
+Only by high confidence: 
+
+```{r}
+percep_data_f |>
+  filter(high_confidence_f!="No") |>
+    summarize(
+      highconf_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by less than high confidence:  
+
+```{r}
+percep_data_f |>
+  filter(high_confidence_f!="Yes") |>
+    summarize(
+      lowconf_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Diff: LHL by Willingness
+
+Only by high Willingness: 
+
+```{r}
+percep_data_f |>
+  filter(high_willingness_f !="No") |>
+    summarize(
+      highwill_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by less than high Willingness: 
+
+```{r}
+percep_data_f |>
+  filter(high_willingness_f !="Yes") |>
+    summarize(
+      lowwill_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Diff: LHL by Age
+
+Only by Older respondents (60+): 
+
+```{r}
+percep_data_f |>
+  filter(age_binary_f !="20-59 yrs") |>
+    summarize(
+      older_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by Younger respondents (20-59): 
+
+```{r}
+percep_data_f |>
+  filter(age_binary_f !="60+ years") |>
+    summarize(
+      younger_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Diff: LHL by Administrator Role
+
+Only by Administrators: 
+
+```{r}
+percep_data_f |>
+  filter(administrator_f !="No") |>
+    summarize(
+      yesadmin_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by non-Administrators: 
+
+```{r}
+percep_data_f |>
+  filter(administrator_f !="Yes") |>
+    summarize(
+      notadmin_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+#### Diff: LHL by Curriculum Role
+
+Only by Curriculum Developers: 
+
+```{r}
+percep_data_f |>
+  filter(curriculum_dev_f !="No") |>
+    summarize(
+      yescurric_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+Only by non-Curriculum Developers: 
+
+```{r}
+percep_data_f |>
+  filter(curriculum_dev_f !="Yes") |>
+    summarize(
+      notcurric_median_diff_lowhealthlit=round(median(diff_lowhealthlit,na.rm=TRUE),0))
+```
+
+## Importance/impact Section
+
+Q19 Importance: The perceived impact of the topic on patient care outcomes (e.g., their significance) Please rate the importance of providing care for patients with the following social or behavioral health factors:
+
+Not at all (1)
+Low (2)
+Moderate (3)
+High (4)
+
+
+## Ability Section
+
+Q20 Ability: Your ability level to ask, evaluate, and integrate the topic into patient care Please rate your ability level to provide care for patients with the following social or behavioral health factors:
+
+Poor (1)
+Adequate (2)
+Good (3)
+Excellent (4)
+
+# Remove -99, replace with NA
+
+```{r}
+#percep_data_f[percep_data_f == -99] <- NA
+```
+
+# Write to file
+
+```{r}
+#write.csv(percep_data_f, "../data/percep_data_export.csv", row.names = FALSE)
+```
+
